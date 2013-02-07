@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 
 import com.android.internal.telephony.ITelephony;
 
+import android.R.integer;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -15,21 +16,25 @@ import android.util.Log;
 import android.view.KeyEvent;
 
 public class PhoneCall extends BroadcastReceiver {
+	public static final int DEFAULT_DURATION = 3000;
+
 	public enum Fun {
-		NONE, CALL, REJECT, ANSWER
+		NONE, CALL, REJECT, ANSWER, ANS_END
 	};
 
 	private static ITelephony telephonyService;
 	private static Context context;
 
 	private static String phoneNum = "";
-	private static int duration = 3000;
+	private static int duration = DEFAULT_DURATION;
+	private static int duration2 = DEFAULT_DURATION;
+
 	private static Fun function;
 
 	public static void init(Context context) {
 		TelephonyManager tm = (TelephonyManager) context
 				.getSystemService(Context.TELEPHONY_SERVICE);
-		
+
 		try {
 			Class c = Class.forName(tm.getClass().getName());
 			Method m = c.getDeclaredMethod("getITelephony");
@@ -76,40 +81,52 @@ public class PhoneCall extends BroadcastReceiver {
 		}
 	}
 
+	private static void sleep(int time) {
+		try {
+			Log.d("autocaller", "Begin sleep: " + System.currentTimeMillis());
+			Thread.sleep(time);
+			Log.d("autocaller", "End sleep " + System.currentTimeMillis());
+
+		} catch (Exception e) {
+		}
+	}
+
+	private static void answer() {
+		Intent answer = new Intent(Intent.ACTION_MEDIA_BUTTON);
+		answer.putExtra(Intent.EXTRA_KEY_EVENT, new KeyEvent(
+				KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK));
+		context.sendOrderedBroadcast(answer, null);
+	}
+
 	@Override
-	public void onReceive(Context context, Intent intent) {		
+	public void onReceive(Context context, Intent intent) {
 		try {
 			if (telephonyService != null && telephonyService.isRinging()) {
 				Bundle bundle = intent.getExtras();
 				String incomingNum = bundle
 						.getString(TelephonyManager.EXTRA_INCOMING_NUMBER);
-				Log.d("autocaller", "On receive " + incomingNum + ": " + System.currentTimeMillis());
+				Log.d("autocaller",
+						"On receive " + incomingNum + ": "
+								+ System.currentTimeMillis());
 				if (incomingNum.equals(phoneNum)) {
-					try {
-						switch (function) {
-						case ANSWER:
-							Log.d("autocaller", "Begin sleep: " + System.currentTimeMillis());
-							Thread.sleep(duration);
-							Log.d("autocaller", "End sleep " + System.currentTimeMillis());
-							//telephonyService.answerRingingCall();
-							Intent answer = new Intent(Intent.ACTION_MEDIA_BUTTON);
-							answer.putExtra(Intent.EXTRA_KEY_EVENT, new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK));
-							context.sendOrderedBroadcast(answer, null);
-							Log.d("autocaller", "After call: " + System.currentTimeMillis());
-							break;
-						case REJECT:
-							Log.d("autocaller", "Begin sleep: " + System.currentTimeMillis());
-							Thread.sleep(duration);
-							Log.d("autocaller", "End sleep " + System.currentTimeMillis());
-							telephonyService.endCall();
-							Log.d("autocaller", "After call: " + System.currentTimeMillis());
-							break;
-						default:
-							break;
-						}						
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}	
+					switch (function) {
+					case ANSWER:
+						sleep(duration);
+						answer();
+						break;
+					case REJECT:
+						sleep(duration);
+						telephonyService.endCall();
+						break;
+					case ANS_END:
+						sleep(duration);
+						answer();
+						sleep(duration2);
+						telephonyService.endCall();
+						break;
+					default:
+						break;
+					}
 				}
 			}
 		} catch (RemoteException e) {
@@ -140,4 +157,13 @@ public class PhoneCall extends BroadcastReceiver {
 	public static void setFunction(Fun function) {
 		PhoneCall.function = function;
 	}
+
+	public static int getDuration2() {
+		return duration2;
+	}
+
+	public static void setDuration2(int duration2) {
+		PhoneCall.duration2 = duration2;
+	}
+
 }
