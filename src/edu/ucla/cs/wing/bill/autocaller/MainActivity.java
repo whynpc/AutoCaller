@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.R.anim;
 import android.R.integer;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.util.Log;
@@ -101,7 +102,10 @@ public class MainActivity extends Activity {
 			editText_duration2.setText("" + (duration2 / 1000.0));
 		}
 
+		
 		PhoneCall.init(this);
+		
+		startService(new Intent(this, LogService.class));
 	}
 
 	@Override
