@@ -1,5 +1,9 @@
 package edu.ucla.cs.wing.bill.autocaller;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import edu.ucla.cs.wing.bill.autocaller.EventLog.Type;
 import edu.ucla.cs.wing.bill.autocaller.PhoneCall.Fun;
 import android.os.Bundle;
 import android.R.anim;
@@ -67,13 +71,10 @@ public class MainActivity extends Activity {
 								.toString();
 						if (text.equals(VALUE_CALL)) {
 							PhoneCall.setFunction(Fun.CALL);
-							Log.d("phonecaller", "switch function: call");
 						} else if (text.equals(VALUE_ANSWER)) {
 							PhoneCall.setFunction(Fun.ANSWER);
-							Log.d("phonecaller", "switch function: answer");
 						} else if (text.equals(VALUE_REJECT)) {
 							PhoneCall.setFunction(Fun.REJECT);
-							Log.d("phonecaller", "switch function: reject");
 						} else if (text.equals(VALUE_ANS_END)) {
 							PhoneCall.setFunction(Fun.ANS_END);
 						} else {
@@ -83,7 +84,7 @@ public class MainActivity extends Activity {
 
 					@Override
 					public void onNothingSelected(AdapterView<?> arg0) {
-						//PhoneCall.setFunction(Fun.NONE);
+						// PhoneCall.setFunction(Fun.NONE);
 					}
 				});
 
@@ -101,11 +102,12 @@ public class MainActivity extends Activity {
 					PhoneCall.DEFAULT_DURATION);
 			editText_duration2.setText("" + (duration2 / 1000.0));
 		}
-
 		
+		
+		EventLog.setEnabled(true);
 		PhoneCall.init(this);
-		
-		startService(new Intent(this, LogService.class));
+
+		startService(new Intent(this, MonitorService.class));
 	}
 
 	@Override
@@ -113,11 +115,19 @@ public class MainActivity extends Activity {
 		getMenuInflater().inflate(R.menu.activity_main, menu);
 		return true;
 	}
+	
+	@Override
+	public void onPause() {
+		super.onPause();
+		EventLog.write(Type.DEBUG, "Activity pause");
+	}
 
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
-		PhoneCall.setFunction(Fun.NONE);
+		EventLog.write(Type.DEBUG, "Activity destroy");
+		EventLog.setEnabled(false);
+		PhoneCall.reset();
 	}
 
 	public void onClickButtonExe(View view) {
@@ -131,7 +141,7 @@ public class MainActivity extends Activity {
 		}
 		int duration2;
 		try {
-			duration2 = (int) Double.parseDouble(editText_duration.getText()
+			duration2 = (int) Double.parseDouble(editText_duration2.getText()
 					.toString()) * 1000;
 		} catch (Exception e) {
 			duration2 = PhoneCall.DEFAULT_DURATION;
@@ -145,6 +155,12 @@ public class MainActivity extends Activity {
 		PhoneCall.setDuration2(duration2);
 
 		editText_running.setText(spinner_function.getSelectedItem().toString());
+
+		String[] parameter = new String[] { "" + System.currentTimeMillis(),
+				spinner_function.getSelectedItem().toString(),
+				phoneNum, "" + duration, "" + duration2 };
+		EventLog.newLogFile(EventLog.genLogFileName(parameter));
+
 		// only Fun.Call is active function; others are passive functions
 		if (PhoneCall.getFunction() == Fun.CALL) {
 			PhoneCall.call();

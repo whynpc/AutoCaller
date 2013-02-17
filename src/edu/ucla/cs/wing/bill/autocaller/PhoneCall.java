@@ -1,8 +1,12 @@
 package edu.ucla.cs.wing.bill.autocaller;
 
 import java.lang.reflect.Method;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import com.android.internal.telephony.ITelephony;
+
+import edu.ucla.cs.wing.bill.autocaller.EventLog.Type;
 
 import android.R.integer;
 import android.content.BroadcastReceiver;
@@ -30,68 +34,61 @@ public class PhoneCall extends BroadcastReceiver {
 	private static int duration2 = DEFAULT_DURATION;
 
 	private static Fun function;
+	
+	private static Timer timer = new Timer();
 
 	public static void init(Context context) {
 		TelephonyManager tm = (TelephonyManager) context
 				.getSystemService(Context.TELEPHONY_SERVICE);
 
 		try {
-			Class c = Class.forName(tm.getClass().getName());
+			Class<?> c = Class.forName(tm.getClass().getName());
 			Method m = c.getDeclaredMethod("getITelephony");
 			m.setAccessible(true);
 			telephonyService = (ITelephony) m.invoke(tm);
-			Log.d("autocaller", "Telephony service initialized");
-
 		} catch (Exception e) {
-			Log.d("autocaller",
-					"Error in accessing Telephony Manager: " + e.toString());
 		}
 		PhoneCall.context = context;
 	}
 
 	public static void reset() {
+		function = Fun.NONE;
 		telephonyService = null;
 		context = null;
 	}
 
-	public static void endCall() {
+	public static void endCall(String phoneNum) {
 		try {
-			if (telephonyService != null)
+			if (telephonyService != null) {
+				EventLog.write(Type.END_CALL, phoneNum);
 				telephonyService.endCall();
+			}	
 		} catch (RemoteException e) {
-			Log.d("autocaller", "End call error: " + e.toString());
 		}
 	}
 
 	public static void call() {
 		if (context != null && function == Fun.CALL) {
-			Log.d("autocaller", "Before call: " + System.currentTimeMillis());
 			Intent phoneIntent = new Intent("android.intent.action.CALL",
 					Uri.parse("tel:" + phoneNum));
+			EventLog.write(Type.CALL, phoneNum);
 			context.startActivity(phoneIntent);
-			Log.d("autocaller", "Begin sleep: " + System.currentTimeMillis());
-			try {
-				Thread.sleep(duration);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-			Log.d("autocaller", "End sleep " + System.currentTimeMillis());
-			PhoneCall.endCall();
-			Log.d("autocaller", "After call: " + System.currentTimeMillis());
+			sleep(duration);
+			PhoneCall.endCall(phoneNum);
 		}
 	}
 
 	private static void sleep(int time) {
 		try {
-			Log.d("autocaller", "Begin sleep: " + System.currentTimeMillis());
+			EventLog.write(Type.SLEEP, "0");
 			Thread.sleep(time);
-			Log.d("autocaller", "End sleep " + System.currentTimeMillis());
-
+			EventLog.write(Type.SLEEP, "1");
 		} catch (Exception e) {
 		}
 	}
 
-	private static void answer() {
+	private static void answer(String phoneNum) {
+		EventLog.write(Type.ANSWER, phoneNum);
 		Intent answer = new Intent(Intent.ACTION_MEDIA_BUTTON);
 		answer.putExtra(Intent.EXTRA_KEY_EVENT, new KeyEvent(
 				KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK));
@@ -100,37 +97,35 @@ public class PhoneCall extends BroadcastReceiver {
 
 	@Override
 	public void onReceive(Context context, Intent intent) {
+		EventLog.write(Type.DEBUG, "onReceive broadcast");
 		try {
 			if (telephonyService != null && telephonyService.isRinging()) {
 				Bundle bundle = intent.getExtras();
 				String incomingNum = bundle
 						.getString(TelephonyManager.EXTRA_INCOMING_NUMBER);
-				Log.d("autocaller",
-						"On receive " + incomingNum + ": "
-								+ System.currentTimeMillis());
-				if (incomingNum.equals(phoneNum)) {
+				EventLog.write(Type.DEBUG, "Incoming call: " + incomingNum);
+				
+				if (incomingNum.endsWith(phoneNum)) {
 					switch (function) {
 					case ANSWER:
 						sleep(duration);
-						answer();
+						answer(incomingNum);
 						break;
 					case REJECT:
 						sleep(duration);
-						telephonyService.endCall();
+						endCall(incomingNum);
 						break;
 					case ANS_END:
 						sleep(duration);
-						answer();
-						sleep(duration2);
-						telephonyService.endCall();
+						answer(incomingNum);
+						scheduleDelayEndCall(duration2, incomingNum);
 						break;
 					default:
 						break;
 					}
 				}
 			}
-		} catch (RemoteException e) {
-			Log.d("autocaller", "Receive call error: " + e.toString());
+		} catch (RemoteException e) {		
 		}
 	}
 
@@ -164,6 +159,10 @@ public class PhoneCall extends BroadcastReceiver {
 
 	public static void setDuration2(int duration2) {
 		PhoneCall.duration2 = duration2;
+	}
+	
+	public static void scheduleDelayEndCall(int duration2, String phoneNum) {
+		timer.schedule(new EndCallTask(phoneNum), duration2);
 	}
 
 }

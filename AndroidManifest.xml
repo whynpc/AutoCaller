@@ -39,9 +39,9 @@
             </intent-filter>
         </activity>
         
-        <service android:name=".LogService" >
+        <service android:name=".MonitorService" >
             <intent-filter>
-                <action android:name="LogService" >
+                <action android:name="MonitorService" >
                 </action>
             </intent-filter>
         </service>
