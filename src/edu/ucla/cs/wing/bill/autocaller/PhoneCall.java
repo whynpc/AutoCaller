@@ -21,6 +21,7 @@ import android.view.KeyEvent;
 
 public class PhoneCall extends BroadcastReceiver {
 	public static final int DEFAULT_DURATION = 3000;
+	public static final int DEFAULT_REPEAT = 1;
 
 	public enum Fun {
 		NONE, CALL, REJECT, ANSWER, ANS_END
@@ -32,10 +33,20 @@ public class PhoneCall extends BroadcastReceiver {
 	private static String phoneNum = "";
 	private static int duration = DEFAULT_DURATION;
 	private static int duration2 = DEFAULT_DURATION;
+	private static int callInterval = 5000;
+	private static int repeat = DEFAULT_REPEAT;
+
+	public static int getRepeat() {
+		return repeat;
+	}
+
+	public static void setRepeat(int repeat) {
+		PhoneCall.repeat = repeat;
+	}
 
 	private static Fun function;
-	
-	private static Timer timer = new Timer();
+
+	private static Timer timer = new Timer();	
 
 	public static void init(Context context) {
 		TelephonyManager tm = (TelephonyManager) context
@@ -50,11 +61,21 @@ public class PhoneCall extends BroadcastReceiver {
 		}
 		PhoneCall.context = context;
 	}
+	
+	public static void start(String phoneNum, int duration, int duration2, int repeat) {
+		setPhoneNum(phoneNum);
+		setDuration(duration);
+		setDuration2(duration2);
+		setRepeat(repeat);
+	}
 
-	public static void reset() {
+	public static void stop() {
 		function = Fun.NONE;
 		telephonyService = null;
 		context = null;
+		
+		timer.cancel();
+		timer = new Timer();
 	}
 
 	public static void endCall(String phoneNum) {
@@ -62,19 +83,17 @@ public class PhoneCall extends BroadcastReceiver {
 			if (telephonyService != null) {
 				EventLog.write(Type.END_CALL, phoneNum);
 				telephonyService.endCall();
-			}	
+			}
 		} catch (RemoteException e) {
 		}
 	}
 
-	public static void call() {
+	public static void call(String phoneNum) {
 		if (context != null && function == Fun.CALL) {
 			Intent phoneIntent = new Intent("android.intent.action.CALL",
 					Uri.parse("tel:" + phoneNum));
 			EventLog.write(Type.CALL, phoneNum);
 			context.startActivity(phoneIntent);
-			sleep(duration);
-			PhoneCall.endCall(phoneNum);
 		}
 	}
 
@@ -104,7 +123,7 @@ public class PhoneCall extends BroadcastReceiver {
 				String incomingNum = bundle
 						.getString(TelephonyManager.EXTRA_INCOMING_NUMBER);
 				EventLog.write(Type.DEBUG, "Incoming call: " + incomingNum);
-				
+
 				if (incomingNum.endsWith(phoneNum)) {
 					switch (function) {
 					case ANSWER:
@@ -118,14 +137,14 @@ public class PhoneCall extends BroadcastReceiver {
 					case ANS_END:
 						sleep(duration);
 						answer(incomingNum);
-						scheduleDelayEndCall(duration2, incomingNum);
+						scheduleDelayEndCall();
 						break;
 					default:
 						break;
 					}
 				}
 			}
-		} catch (RemoteException e) {		
+		} catch (RemoteException e) {
 		}
 	}
 
@@ -160,9 +179,19 @@ public class PhoneCall extends BroadcastReceiver {
 	public static void setDuration2(int duration2) {
 		PhoneCall.duration2 = duration2;
 	}
-	
-	public static void scheduleDelayEndCall(int duration2, String phoneNum) {
+
+	public static void scheduleDelayEndCall() {
 		timer.schedule(new EndCallTask(phoneNum), duration2);
+	}
+	
+	public static void scheduleRepeatCall() {
+		int delay = 2000;  // delay before first call start
+		for (int i = 0; i < repeat; i++) {
+			timer.schedule(new CallTask(phoneNum), delay);
+			delay += duration;
+			timer.schedule(new EndCallTask(phoneNum), delay);
+			delay += duration2;
+		}
 	}
 
 }

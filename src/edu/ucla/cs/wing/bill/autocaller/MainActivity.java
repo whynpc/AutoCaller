@@ -27,18 +27,21 @@ public class MainActivity extends Activity {
 	private EditText editText_duration;
 	private EditText editText_duration2;
 	private EditText editText_running;
+	private EditText editText_repeat;
 
 	private Spinner spinner_function;
 	private Button button_exe;
+	private Button button_stop;
 
 	private SharedPreferences settings;
 
-	// For prefernces
+	// For preferences
 	public static final String PREF_FILE = "pref";
 	public static final String KEY_PHONE_NUM = "phone_num";
 	public static final String KEY_DURATION = "duration";
 	public static final String KEY_DURATION2 = "duration2";
 	public static final String KEY_FUNCTION = "function";
+	public static final String KEY_REPEAT = "repeat";
 
 	public static final String VALUE_CALL = "Call";
 	public static final String VALUE_REJECT = "Reject";
@@ -54,8 +57,10 @@ public class MainActivity extends Activity {
 		this.editText_duration = (EditText) findViewById(R.id.editText_duration);
 		this.editText_duration2 = (EditText) findViewById(R.id.editText_duration2);
 		this.editText_running = (EditText) findViewById(R.id.editText_running);
+		this.editText_repeat = (EditText) findViewById(R.id.editText_repeat);
 		this.spinner_function = (Spinner) findViewById(R.id.spinner_function);
 		this.button_exe = (Button) findViewById(R.id.button_exe);
+		this.button_stop = (Button) findViewById(R.id.button_stop);
 
 		ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
 				android.R.layout.simple_spinner_item, new String[] {
@@ -102,7 +107,10 @@ public class MainActivity extends Activity {
 					PhoneCall.DEFAULT_DURATION);
 			editText_duration2.setText("" + (duration2 / 1000.0));
 		}
-		
+		if (settings.contains(KEY_REPEAT)) {
+			int repeat = settings.getInt(KEY_REPEAT, PhoneCall.DEFAULT_REPEAT);
+			editText_repeat.setText("" + repeat);
+		}
 		
 		EventLog.setEnabled(true);
 		PhoneCall.init(this);
@@ -127,10 +135,11 @@ public class MainActivity extends Activity {
 		super.onDestroy();
 		EventLog.write(Type.DEBUG, "Activity destroy");
 		EventLog.setEnabled(false);
-		PhoneCall.reset();
+		PhoneCall.stop();
 	}
 
 	public void onClickButtonExe(View view) {
+		// get parameters from EditText
 		String phoneNum = editText_phoneNum.getText().toString();
 		int duration;
 		try {
@@ -146,33 +155,43 @@ public class MainActivity extends Activity {
 		} catch (Exception e) {
 			duration2 = PhoneCall.DEFAULT_DURATION;
 		}
-
+		int repeat;
+		try {
+			repeat = Integer.parseInt(editText_repeat.getText().toString());
+		} catch (Exception e) {
+			repeat = PhoneCall.DEFAULT_REPEAT;
+		}
+		
 		// store parameter settings for the convenience of future tests
-		updateDefaultSettings(phoneNum, duration, duration2);
-
-		PhoneCall.setPhoneNum(phoneNum);
-		PhoneCall.setDuration(duration);
-		PhoneCall.setDuration2(duration2);
-
+		updateDefaultSettings(phoneNum, duration, duration2, repeat);
+		// update running EditText
 		editText_running.setText(spinner_function.getSelectedItem().toString());
-
+		
+		// generate new log file
 		String[] parameter = new String[] { "" + System.currentTimeMillis(),
 				spinner_function.getSelectedItem().toString(),
-				phoneNum, "" + duration, "" + duration2 };
+				phoneNum, "" + duration, "" + duration2 , "" + repeat};
 		EventLog.newLogFile(EventLog.genLogFileName(parameter));
-
+		
+		// Setting parameters of PhoneCall
+		PhoneCall.start(phoneNum, duration, duration2, repeat);
 		// only Fun.Call is active function; others are passive functions
-		if (PhoneCall.getFunction() == Fun.CALL) {
-			PhoneCall.call();
-		}
+		PhoneCall.scheduleRepeatCall();
+		
+	}
+	
+	public void onClickButtonStop(View view) {
+		editText_running.setText("");
+		PhoneCall.stop();
 	}
 
 	private void updateDefaultSettings(String phoneNum, int duration,
-			int duration2) {
+			int duration2, int repeat) {
 		Editor editor = settings.edit();
 		editor.putString(KEY_PHONE_NUM, phoneNum);
 		editor.putInt(KEY_DURATION, duration);
 		editor.putInt(KEY_DURATION2, duration2);
+		editor.putInt(KEY_REPEAT, repeat);
 		editor.commit();
 	}
 }
